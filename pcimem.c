@@ -71,15 +71,15 @@ int main(int argc, char **argv) {
 		access_type = tolower(argv[3][0]);
 
     if((fd = open(filename, O_RDWR | O_SYNC)) == -1) PRINT_ERROR;
-    printf("%s opened.\n", filename);
-    printf("Target offset is 0x%x, page size is %ld\n", (int) target, sysconf(_SC_PAGE_SIZE));
+    /* printf("%s opened.\n", filename); */
+    /* printf("Target offset is 0x%x, page size is %ld\n", (int) target, sysconf(_SC_PAGE_SIZE)); */
     fflush(stdout);
 
     /* Map one page */
-    printf("mmap(%d, %ld, 0x%x, 0x%x, %d, 0x%x)\n", 0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (int) target);
+    /* printf("mmap(%d, %ld, 0x%x, 0x%x, %d, 0x%x)\n", 0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (int) target); */
     map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
     if(map_base == (void *) -1) PRINT_ERROR;
-    printf("PCI Memory mapped to address 0x%08lx.\n", (unsigned long) map_base);
+    /* printf("PCI Memory mapped to address 0x%08lx.\n", (unsigned long) map_base); */
     fflush(stdout);
 
     virt_addr = map_base + (target & MAP_MASK);
@@ -104,8 +104,10 @@ int main(int argc, char **argv) {
 			fprintf(stderr, "Illegal data type '%c'.\n", access_type);
 			exit(2);
 	}
-    printf("Value at offset 0x%X (%p): 0x%0*lX\n", (int) target, virt_addr, type_width,
-	   read_result);
+    printf("0x%0*lX\n", type_width, read_result);
+
+    /* printf("Value at offset 0x%X (%p): 0x%0*lX\n", (int) target, virt_addr, type_width, */
+    /* 	   read_result); */
     fflush(stdout);
 
 	if(argc > 4) {
@@ -128,8 +130,8 @@ int main(int argc, char **argv) {
 				read_result = *((uint64_t *) virt_addr);
 				break;
 		}
-		printf("Written 0x%0*lX; readback 0x%*lX\n", type_width,
-		       writeval, type_width, read_result);
+		/* printf("Written 0x%0*lX; readback 0x%*lX\n", type_width, */
+		/*        writeval, type_width, read_result); */
 		fflush(stdout);
 	}
 
