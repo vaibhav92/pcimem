@@ -22,6 +22,8 @@
  *
  */
 
+#include <unistd.h>
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -35,107 +37,115 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 
-#define PRINT_ERROR \
-	do { \
-		fprintf(stderr, "Error at line %d, file %s (%d) [%s]\n", \
-		__LINE__, __FILE__, errno, strerror(errno)); exit(1); \
-	} while(0)
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-#define MAP_SIZE 4096UL
-#define MAP_MASK (MAP_SIZE - 1)
+static struct dump_range {
+	const char *name, *fname;
+	uint32_t ranges[10][2];
+
+} dump_ranges[]= {
+	/* { */
+	/* 	.name = "bar0", */
+	/* 	.fname = "resource0", */
+	/* 	.ranges= { */
+	/* 		{ 0x00000, 0x0FFFF }, */
+	/* 		{ 0x10000, 0x1FFFF }, */
+	/* 		{ 0x20000, 0x2FFFF }, */
+	/* 		{ 0x30000, 0x3FFFF }, */
+	/* 	} */
+	/* }, */
+	{
+		.name = "bar2",
+		.fname = "resource2",
+		.ranges= {
+			{ 0x00000, 0x07EFF },
+
+			/* { 0x00000, 0x07EFF }, */
+			/* { 0x10000, 0x100FF }, */
+			/* { 0x10100, 0x101FF }, */
+			/* { 0x10200, 0x102FF }, */
+			/* { 0x10300, 0x103FF }, */
+		}
+	},
+};
 
 int main(int argc, char **argv) {
 	int fd;
-	void *map_base, *virt_addr;
-	uint64_t read_result, writeval;
-	char *filename;
-	off_t target;
-	int access_type = 'w';
-	int type_width;
+	void *map_base;
+	char path_buffer[PATH_MAX];
+	uint64_t page_size, page_mask;
 
-	if(argc < 3) {
+
+	page_size = sysconf(_SC_PAGE_SIZE);
+	page_mask = ~(page_size - 1);
+	
+	if(argc < 2) {
 		// pcimem /sys/bus/pci/devices/0001\:00\:07.0/resource0 0x100 w 0x00
 		// argv[0]  [1]                                         [2]   [3] [4]
-		fprintf(stderr, "\nUsage:\t%s { sys file } { offset } [ type [ data ] ]\n"
-			"\tsys file: sysfs file for the pci resource to act on\n"
-			"\toffset  : offset into pci memory region to act upon\n"
-			"\ttype    : access operation type : [b]yte, [h]alfword, [w]ord, [d]ouble-word\n"
-			"\tdata    : data to be written\n\n",
+		fprintf(stderr, "\nUsage:\t%s { sys dir }  ]\n"
+			"\tsys dir: sysfs dir for the pci resource to act on\n",
 			argv[0]);
 		exit(1);
 	}
-	filename = argv[1];
-	target = strtoul(argv[2], 0, 0);
 
-	if(argc > 3)
-		access_type = tolower(argv[3][0]);
+	for(int i=0; i < ARRAY_SIZE(dump_ranges); ++i) {
+		struct dump_range * drange = &dump_ranges[i];
+		uint64_t range_max = 0;
+		int rindex;
+		
+		snprintf(path_buffer, sizeof(path_buffer), "%s/%s", argv[1], drange->fname);
+		path_buffer[sizeof(path_buffer)] = '\0';
 
-    if((fd = open(filename, O_RDWR | O_SYNC)) == -1) PRINT_ERROR;
-    /* printf("%s opened.\n", filename); */
-    /* printf("Target offset is 0x%x, page size is %ld\n", (int) target, sysconf(_SC_PAGE_SIZE)); */
-    fflush(stdout);
-
-    /* Map one page */
-    /* printf("mmap(%d, %ld, 0x%x, 0x%x, %d, 0x%x)\n", 0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, (int) target); */
-    map_base = mmap(0, MAP_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, target & ~MAP_MASK);
-    if(map_base == (void *) -1) PRINT_ERROR;
-    /* printf("PCI Memory mapped to address 0x%08lx.\n", (unsigned long) map_base); */
-    fflush(stdout);
-
-    virt_addr = map_base + (target & MAP_MASK);
-    switch(access_type) {
-		case 'b':
-			read_result = *((uint8_t *) virt_addr);
-			type_width = 2;
-			break;
-		case 'h':
-			read_result = *((uint16_t *) virt_addr);
-			type_width = 4;
-			break;
-		case 'w':
-			read_result = *((uint32_t *) virt_addr);
-			type_width = 8;
-			break;
-                case 'd':
-			read_result = *((uint64_t *) virt_addr);
-			type_width = 16;
-			break;
-		default:
-			fprintf(stderr, "Illegal data type '%c'.\n", access_type);
-			exit(2);
-	}
-    printf("0x%0*lX\n", type_width, read_result);
-
-    /* printf("Value at offset 0x%X (%p): 0x%0*lX\n", (int) target, virt_addr, type_width, */
-    /* 	   read_result); */
-    fflush(stdout);
-
-	if(argc > 4) {
-		writeval = strtoull(argv[4], NULL, 0);
-		switch(access_type) {
-			case 'b':
-				*((uint8_t *) virt_addr) = writeval;
-				read_result = *((uint8_t *) virt_addr);
-				break;
-			case 'h':
-				*((uint16_t *) virt_addr) = writeval;
-				read_result = *((uint16_t *) virt_addr);
-				break;
-			case 'w':
-				*((uint32_t *) virt_addr) = writeval;
-				read_result = *((uint32_t *) virt_addr);
-				break;
-			case 'd':
-				*((uint64_t *) virt_addr) = writeval;
-				read_result = *((uint64_t *) virt_addr);
-				break;
+		fd = open(path_buffer, O_RDONLY | O_SYNC);
+		if (fd == -1) {
+			printf("[%s]: %s", drange->name, strerror(errno));
+			fflush(stdout);
+			continue;
 		}
-		/* printf("Written 0x%0*lX; readback 0x%*lX\n", type_width, */
-		/*        writeval, type_width, read_result); */
-		fflush(stdout);
+
+		/* find the number of pages we need to map for the ranges */
+		for (rindex = 0 ; rindex < ARRAY_SIZE(drange->ranges); ++rindex) {
+			typeof(drange->ranges[0][0]) *range = drange->ranges[rindex];
+			if (range[0] > range[1]) {
+				int low = range[1];
+				range[1] = range[0];
+				range[0] = low;
+			}
+
+			if (range[1] > range_max)
+				range_max = range[1];
+
+		}
+
+		map_base = mmap(0, (range_max | page_mask) +1 , PROT_READ,
+				MAP_SHARED, fd, 0);
+
+		if(map_base == MAP_FAILED) {
+			printf("[%s]: %s", drange->name, strerror(errno));
+			fflush(stdout);
+			close(fd);
+			continue;
+		}
+
+		for (rindex = 0 ; rindex < ARRAY_SIZE(drange->ranges); ++rindex){
+			typeof(drange->ranges[0][0]) *range = drange->ranges[rindex];
+			uint32_t index;
+			
+			if (range[0] == range[1] && range[0] == 0)
+				continue;
+			
+			for( index = range[0]; index <= range[1];
+			     index += sizeof(uint64_t)) {
+				uint64_t *ptr = (uint64_t*) (map_base + index);
+				printf("[%s + %08X] = %016lX\n", drange->name,
+				       index, *ptr);
+				fflush(stdout);
+			}
+		}
+		
+		munmap(map_base, (range_max | page_mask) +1);
+		close(fd);
 	}
 
-	if(munmap(map_base, MAP_SIZE) == -1) PRINT_ERROR;
-    close(fd);
     return 0;
 }
