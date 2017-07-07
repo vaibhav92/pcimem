@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
 
 		fd = open(path_buffer, O_RDONLY | O_SYNC);
 		if (fd == -1) {
-			printf("[%s]: %s", drange->name, strerror(errno));
+			printf("[%s + OPEN]: %s\n", drange->name, strerror(errno));
 			fflush(stdout);
 			continue;
 		}
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
 				MAP_SHARED, fd, 0);
 
 		if(map_base == MAP_FAILED) {
-			printf("[%s]: %s", drange->name, strerror(errno));
+			printf("[%s + MMAP]:%s\n", drange->name, strerror(errno));
 			fflush(stdout);
 			close(fd);
 			continue;
